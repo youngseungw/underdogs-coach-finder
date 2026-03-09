@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import type { Coach, FilterState } from "@/types/coach";
 import { useCoachData } from "@/contexts/CoachDataContext";
+import type { AiExtractResult } from "@/lib/aiReason";
+import { generateAiReason } from "@/lib/aiReason";
 
 const initialFilter: FilterState = {
   search: "",
@@ -18,6 +20,7 @@ const initialFilter: FilterState = {
 export function useCoachSearch() {
   const { allCoaches: allCoachesData } = useCoachData();
   const [filters, setFilters] = useState<FilterState>(initialFilter);
+  const [aiResult, setAiResult] = useState<AiExtractResult | null>(null);
   const [selectedCoaches, setSelectedCoaches] = useState<Set<number>>(new Set());
 
   const allCoaches = useMemo(() => allCoachesData, [allCoachesData]);
@@ -114,14 +117,30 @@ export function useCoachSearch() {
         score += Math.min(coach.career_years / 10, 1);
         if (coach.career_history) score += 1;
         if (coach.has_startup) score += 0.5;
+        // AI freeKeyword 부스트
+        if (aiResult) {
+          const coachText = [
+            coach.intro,
+            coach.career_history,
+            coach.current_work,
+            coach.underdogs_history,
+            coach.tools_skills,
+          ].join(" ").toLowerCase();
+          aiResult.freeKeywords.forEach((kw) => {
+            if (coachText.includes(kw.toLowerCase())) score += 3;
+          });
+        }
         return { coach, score };
       })
       .sort((a, b) => b.score - a.score);
-  }, [filteredCoaches, filters]);
+  }, [filteredCoaches, filters, aiResult]);
 
   const topCoaches = useMemo(() => {
-    return rankedCoaches.slice(0, filters.resultCount);
-  }, [rankedCoaches, filters.resultCount]);
+    return rankedCoaches.slice(0, filters.resultCount).map((item) => ({
+      ...item,
+      aiReason: aiResult ? generateAiReason(item.coach, aiResult) : undefined,
+    }));
+  }, [rankedCoaches, filters.resultCount, aiResult]);
 
   const toggleCoach = useCallback((coachId: number) => {
     setSelectedCoaches((prev) => {
@@ -148,6 +167,20 @@ export function useCoachSearch() {
     setFilters(initialFilter);
   }, []);
 
+  const applyAiResult = useCallback((result: AiExtractResult) => {
+    setAiResult(result);
+    setFilters((prev) => ({
+      ...prev,
+      expertise: result.expertise.length > 0 ? result.expertise : prev.expertise,
+      industries: result.industries.length > 0 ? result.industries : prev.industries,
+      roles: result.roles.length > 0 ? result.roles : prev.roles,
+    }));
+  }, []);
+
+  const clearAiResult = useCallback(() => {
+    setAiResult(null);
+  }, []);
+
   const selectedCoachList = useMemo(() => {
     return allCoaches.filter((c) => selectedCoaches.has(c.id));
   }, [allCoaches, selectedCoaches]);
@@ -166,5 +199,8 @@ export function useCoachSearch() {
     clearSelection,
     allCoaches,
     stats,
+    aiResult,
+    applyAiResult,
+    clearAiResult,
   };
 }
