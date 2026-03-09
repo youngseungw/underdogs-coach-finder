@@ -16,6 +16,7 @@ interface CoachCardProps {
   onToggle: () => void;
   onViewDetail: () => void;
   onEdit?: () => void;
+  aiReason?: string;
 }
 
 function formatCareer(raw: string, years: number): string {
@@ -48,6 +49,7 @@ export default function CoachCard({
   onToggle,
   onViewDetail,
   onEdit,
+  aiReason,
 }: CoachCardProps) {
   const { lang, t } = useLanguage();
   const catLabel = CATEGORY_LABELS[coach.category]?.[lang] || coach.category;
@@ -155,6 +157,14 @@ export default function CoachCard({
           <p className="text-[11px] text-primary/80 italic mb-2.5 line-clamp-1 leading-relaxed">
             "{coach.intro}"
           </p>
+        )}
+
+        {/* AI 추천 이유 */}
+        {aiReason && (
+          <div className="flex items-start gap-1 mb-2 px-1.5 py-1 bg-primary/5 border border-primary/20 rounded-[2px]">
+            <span className="text-[9px] font-bold text-primary mt-[1px] shrink-0">✦ AI</span>
+            <span className="text-[10px] text-primary/80 leading-snug">{aiReason}</span>
+          </div>
         )}
 
         {/* 태그들 */}
