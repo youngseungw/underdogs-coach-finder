@@ -12,10 +12,12 @@ import CoachDetailModal from "@/components/CoachDetailModal";
 import CoachFormModal from "@/components/CoachFormModal";
 import SelectionBar from "@/components/SelectionBar";
 import { Button } from "@/components/ui/button";
-import { CheckSquare, Users, Search, Plus, Settings2 } from "lucide-react";
+import { CheckSquare, Users, Search, Plus, Settings2, Sparkles } from "lucide-react";
 import type { Coach } from "@/types/coach";
 import { AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
+import AiRecommendModal from "@/components/AiRecommendModal";
+import type { AiExtractResult } from "@/lib/aiReason";
 
 export default function Home() {
   const {
@@ -31,11 +33,15 @@ export default function Home() {
     clearSelection,
     allCoaches,
     stats,
+    aiResult,
+    applyAiResult,
+    clearAiResult,
   } = useCoachSearch();
 
   const { addCoach, updateCoach, deleteCoach, customDataStats } = useCoachData();
   const { t } = useLanguage();
   const [detailCoach, setDetailCoach] = useState<Coach | null>(null);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"recommended" | "all">("recommended");
   const [formOpen, setFormOpen] = useState(false);
   const [editCoach, setEditCoach] = useState<Coach | null>(null);
@@ -76,6 +82,10 @@ export default function Home() {
 
   const handleDelete = (id: number) => {
     deleteCoach(id);
+  };
+
+  const handleApplyAi = (result: AiExtractResult) => {
+    applyAiResult(result);
   };
 
   return (
@@ -139,6 +149,22 @@ export default function Home() {
                   <span>{t("filter_active")}</span>
                 </div>
               )}
+
+              {/* AI 추천 적용 중 배지 */}
+              {aiResult && (
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-primary/10 border border-primary/30 rounded-[2px]">
+                  <Sparkles className="w-3 h-3 text-primary" />
+                  <span className="text-[10px] text-primary font-medium truncate max-w-[180px]">
+                    {aiResult.summary}
+                  </span>
+                  <button
+                    onClick={clearAiResult}
+                    className="text-primary/60 hover:text-primary ml-1 text-[11px] font-bold leading-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 우측: 신규 등록 + 선택 상태 */}
@@ -154,6 +180,16 @@ export default function Home() {
                   </span>
                 </div>
               )}
+
+              {/* AI 추천 버튼 */}
+              <Button
+                onClick={() => setAiModalOpen(true)}
+                variant="outline"
+                className="h-7 px-3 text-[11px] rounded-[2px] border-primary text-primary hover:bg-primary hover:text-white"
+              >
+                <Sparkles className="w-3 h-3 mr-1" />
+                AI 추천
+              </Button>
 
               {/* 신규 등록 버튼 */}
               <Button
@@ -213,6 +249,7 @@ export default function Home() {
                     onToggle={() => toggleCoach(item.coach.id)}
                     onViewDetail={() => setDetailCoach(item.coach)}
                     onEdit={() => handleOpenEdit(item.coach)}
+                    aiReason={viewMode === "recommended" ? (item as any).aiReason : undefined}
                   />
                 ))}
               </AnimatePresence>
@@ -249,6 +286,13 @@ export default function Home() {
         selectedCoaches={selectedCoachList}
         onRemove={(id) => toggleCoach(id)}
         onClear={clearSelection}
+      />
+
+      {/* AI 추천 모달 */}
+      <AiRecommendModal
+        open={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        onApply={handleApplyAi}
       />
     </div>
   );
