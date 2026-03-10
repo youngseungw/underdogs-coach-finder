@@ -181,15 +181,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* AI 추천 버튼 */}
-              <button
-                onClick={() => setAiModalOpen(true)}
-                className="flex items-center gap-1.5 h-9 px-4 rounded-[3px] text-[12px] font-semibold text-white bg-violet-600 hover:bg-violet-700 active:bg-violet-800 shadow-sm transition-colors"
-              >
-                <Sparkles className="w-4 h-4" />
-                AI 맞춤 추천
-              </button>
-
               {/* 신규 등록 버튼 */}
               <Button
                 onClick={handleOpenNew}
@@ -216,7 +207,28 @@ export default function Home() {
 
         {/* 코치 카드 그리드 */}
         <div className="p-6 pb-28">
-          {displayCoaches.length === 0 ? (
+          {/* 초기 상태: 필터·AI 결과 없는 추천 모드 → 랜딩 안내 */}
+          {viewMode === "recommended" && !hasActiveFilters && !aiResult ? (
+            <div className="flex flex-col items-center justify-center py-32 text-center">
+              <div className="w-20 h-20 rounded-full bg-violet-50 flex items-center justify-center mb-6">
+                <Sparkles className="w-9 h-9 text-violet-500" />
+              </div>
+              <h2 className="text-[18px] font-bold text-foreground mb-2">
+                필요한 코치를 찾아보세요
+              </h2>
+              <p className="text-[13px] text-muted-foreground mb-8 max-w-xs leading-relaxed">
+                좌측 필터로 조건을 설정하거나,<br />
+                AI 맞춤 추천으로 자연어로 요청해보세요.
+              </p>
+              <button
+                onClick={() => setAiModalOpen(true)}
+                className="flex items-center gap-2 h-10 px-6 rounded-[3px] text-[13px] font-semibold text-white bg-violet-600 hover:bg-violet-700 shadow-sm transition-colors"
+              >
+                <Sparkles className="w-4 h-4" />
+                AI 맞춤 추천 시작하기
+              </button>
+            </div>
+          ) : displayCoaches.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
                 <Users className="w-7 h-7 text-muted-foreground" />
@@ -287,6 +299,21 @@ export default function Home() {
         onRemove={(id) => toggleCoach(id)}
         onClear={clearSelection}
       />
+
+      {/* Floating AI Button */}
+      <div className="fixed bottom-24 right-6 z-50 flex flex-col items-center gap-2">
+        <span className="text-[11px] font-semibold text-violet-600 bg-white border border-violet-200 px-2.5 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+          AI 맞춤 추천
+        </span>
+        <button
+          onClick={() => setAiModalOpen(true)}
+          className="relative w-14 h-14 rounded-full bg-violet-600 hover:bg-violet-700 active:scale-95 text-white shadow-xl flex items-center justify-center transition-all hover:scale-105"
+          aria-label="AI 맞춤 추천 열기"
+        >
+          <span className="absolute inset-0 rounded-full bg-violet-400 animate-ping opacity-20" />
+          <Sparkles className="w-6 h-6 relative z-10" />
+        </button>
+      </div>
 
       {/* AI 추천 모달 */}
       <AiRecommendModal
