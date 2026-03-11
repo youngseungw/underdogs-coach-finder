@@ -4,13 +4,13 @@
  */
 import { Check, User, Globe, Pencil } from "lucide-react";
 import type { Coach } from "@/types/coach";
-import { TIER_LABELS, CATEGORY_LABELS } from "@/types/coach";
+import { TIER_LABELS, TIER_SHORT, CATEGORY_LABELS } from "@/types/coach";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 interface CoachCardProps {
   coach: Coach;
-  score?: number;
+  matchPercent?: number;
   rank?: number;
   isSelected: boolean;
   onToggle: () => void;
@@ -42,7 +42,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function CoachCard({
   coach,
-  score,
+  matchPercent,
   rank,
   isSelected,
   onToggle,
@@ -73,7 +73,7 @@ export default function CoachCard({
 
       {/* 티어 뱃지 */}
       <div className={`absolute top-0 right-8 px-1.5 py-[1px] text-[9px] font-mono font-semibold ${TIER_COLORS[coach.tier]}`}>
-        T{coach.tier}
+        {TIER_SHORT[coach.tier] || `T${coach.tier}`}
       </div>
 
       {/* 선택 체크 */}
@@ -123,16 +123,16 @@ export default function CoachCard({
             <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
               {[coach.organization, coach.position].filter(Boolean).join(" · ") || coach.main_field || "-"}
             </p>
-            {score !== undefined && score > 0 && (
-              <div className="mt-1.5 flex items-center gap-1.5">
-                <div className="w-12 h-[3px] bg-gray-100 rounded-full overflow-hidden">
+            {matchPercent !== undefined && matchPercent > 0 && (
+              <div className="mt-1.5 flex items-center gap-2">
+                <div className="flex-1 h-[3px] bg-gray-100 rounded-full overflow-hidden max-w-[60px]">
                   <div
                     className="h-full bg-primary rounded-full"
-                    style={{ width: `${Math.min(score * 5, 100)}%` }}
+                    style={{ width: `${matchPercent}%` }}
                   />
                 </div>
-                <span className="text-[10px] font-mono text-muted-foreground">
-                  {score.toFixed(1)}
+                <span className="text-[10px] font-mono font-bold text-primary">
+                  {matchPercent}%
                 </span>
               </div>
             )}

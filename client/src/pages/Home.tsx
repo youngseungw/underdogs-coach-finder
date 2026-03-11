@@ -13,7 +13,7 @@ import CoachFormModal from "@/components/CoachFormModal";
 import AiRecommendModal from "@/components/AiRecommendModal";
 import SelectionBar from "@/components/SelectionBar";
 import { Button } from "@/components/ui/button";
-import { CheckSquare, Users, Search, Plus, Settings2, Sparkles, LogOut, ChevronDown } from "lucide-react";
+import { CheckSquare, Users, Search, Plus, Settings2, Sparkles, LogOut, ChevronDown, ClipboardList } from "lucide-react";
 import type { Coach } from "@/types/coach";
 import { AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -60,6 +60,10 @@ export default function Home() {
 
   const hasMoreAll =
     viewMode === "all" && allPage * ALL_PAGE_SIZE < filteredCoaches.length;
+
+  const maxTopScore = topCoaches.length > 0
+    ? Math.max(...topCoaches.map((c) => c.score), 1)
+    : 1;
 
   const hasActiveFilters =
     filters.expertise.length > 0 ||
@@ -237,6 +241,15 @@ export default function Home() {
                 {t("ai_recommend") || "AI 추천"}
               </Button>
 
+              {/* 사업 관리 버튼 */}
+              <a
+                href="/projects"
+                className="inline-flex items-center h-7 px-3 text-[11px] font-medium rounded-[2px] border border-border text-muted-foreground hover:bg-muted transition-colors"
+              >
+                <ClipboardList className="w-3 h-3 mr-1" />
+                사업 관리
+              </a>
+
               {/* 신규 등록 버튼 */}
               <Button
                 onClick={handleOpenNew}
@@ -305,7 +318,9 @@ export default function Home() {
                     <CoachCard
                       key={item.coach.id}
                       coach={item.coach}
-                      score={viewMode === "recommended" ? item.score : undefined}
+                      matchPercent={viewMode === "recommended" && item.score > 0
+                        ? Math.round((item.score / maxTopScore) * 100)
+                        : undefined}
                       rank={viewMode === "recommended" ? idx + 1 : undefined}
                       isSelected={selectedCoaches.has(item.coach.id)}
                       onToggle={() => toggleCoach(item.coach.id)}

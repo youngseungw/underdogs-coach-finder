@@ -53,9 +53,15 @@ export interface FilterState {
 }
 
 export const TIER_LABELS: Record<number, Record<LangCode, string>> = {
-  1: { ko: "Tier 1 · 핵심 파트너", en: "Tier 1 · Core Partners", ja: "Tier 1 · コアパートナー" },
-  2: { ko: "Tier 2 · 확장 코치", en: "Tier 2 · Extended Coaches", ja: "Tier 2 · 拡張コーチ" },
-  3: { ko: "Tier 3 · 전문 영역", en: "Tier 3 · Specialists", ja: "Tier 3 · 専門領域" },
+  1: { ko: "베테랑 코치", en: "Veteran Coach", ja: "ベテランコーチ" },
+  2: { ko: "UD 코치", en: "UD Coach", ja: "UDコーチ" },
+  3: { ko: "외부연사/컨설턴트", en: "External Speaker", ja: "外部講師" },
+};
+
+export const TIER_SHORT: Record<number, string> = {
+  1: "베테랑",
+  2: "UD",
+  3: "외부",
 };
 
 export const CATEGORY_LABELS: Record<string, Record<LangCode, string>> = {
