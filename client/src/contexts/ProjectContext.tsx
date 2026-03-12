@@ -1,7 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
-import type { Project, ProjectCoach, ProjectCoachEvaluation, ProjectStatus } from "@/types/project";
+import type { Project, ProjectCoach, ProjectCoachEvaluation } from "@/types/project";
 
 const LS_KEY = "underdogs_projects";
+
+interface CoachPayment {
+  unitPrice?: number;
+  sessions?: number;
+  totalAmount?: number;
+}
 
 interface ProjectContextType {
   projects: Project[];
@@ -11,6 +17,7 @@ interface ProjectContextType {
   addCoachToProject: (projectId: number, coach: Omit<ProjectCoach, "evaluation">) => void;
   removeCoachFromProject: (projectId: number, coachId: number) => void;
   updateCoachTask: (projectId: number, coachId: number, taskSummary: string) => void;
+  updateCoachPayment: (projectId: number, coachId: number, payment: CoachPayment) => void;
   saveEvaluation: (projectId: number, coachId: number, evaluation: ProjectCoachEvaluation) => void;
 }
 
@@ -76,6 +83,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     ));
   }, []);
 
+  const updateCoachPayment = useCallback((projectId: number, coachId: number, payment: CoachPayment) => {
+    setProjects(prev => prev.map(p =>
+      p.id !== projectId ? p : {
+        ...p,
+        coaches: p.coaches.map(c =>
+          c.coachId === coachId ? { ...c, ...payment } : c
+        ),
+      }
+    ));
+  }, []);
+
   const saveEvaluation = useCallback((projectId: number, coachId: number, evaluation: ProjectCoachEvaluation) => {
     setProjects(prev => prev.map(p =>
       p.id !== projectId ? p : {
@@ -90,7 +108,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   return (
     <ProjectContext.Provider value={{
       projects, addProject, updateProject, deleteProject,
-      addCoachToProject, removeCoachFromProject, updateCoachTask, saveEvaluation,
+      addCoachToProject, removeCoachFromProject, updateCoachTask, updateCoachPayment, saveEvaluation,
     }}>
       {children}
     </ProjectContext.Provider>
