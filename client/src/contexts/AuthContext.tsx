@@ -10,6 +10,7 @@ import {
 interface AuthContextType {
   isAuthenticated: boolean;
   user: string | null;
+  isAdmin: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -23,6 +24,9 @@ const ALLOWED_ACCOUNTS: Record<string, string> = {
   "zero@udimpact.ai": "underdogs2024!",
   "admin@underdogs.co.kr": "underdogs2024!",
 };
+
+// 코치 수정 권한을 가진 admin 계정
+const ADMIN_EMAILS = new Set(["zero@udimpact.ai", "admin@underdogs.co.kr"]);
 
 const AUTH_STORAGE_KEY = "underdogs_auth";
 
@@ -89,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, loginWithGoogle, logout, isFirebaseReady: isFirebaseConfigured }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, isAdmin: user ? ADMIN_EMAILS.has(user) : false, login, loginWithGoogle, logout, isFirebaseReady: isFirebaseConfigured }}>
       {children}
     </AuthContext.Provider>
   );

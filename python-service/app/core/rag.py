@@ -1,59 +1,76 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+import re
+import json
+import os
+import google.generativeai as genai
 
-# Setup the Gemini LLM
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.1)
-parser = JsonOutputParser()
+# Gemini 직접 호출 (LangChain 파서 우회 — gemini-2.5-flash thinking 호환)
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
+_model = genai.GenerativeModel(
+    "gemini-2.5-flash",
+    generation_config=genai.GenerationConfig(
+        temperature=0.1,
+        response_mime_type="application/json",   # JSON 모드 강제
+    ),
+)
 
-FORMAT_INSTRUCTIONS = """
-Your output must be a valid JSON object with the following fields:
-- "project_name": (string) The name of the project or RFP
-- "required_domains": (list of strings) Key domains or industries required
-- "required_skills": (list of strings) Key skills required from the coaches
-- "coach_count": (integer) Number of coaches required
-- "budget": (integer or null) Total budget if mentioned
-- "summary": (string) 1-2 sentence summary of the project goal
+SYSTEM_PROMPT = """You are an expert project manager analyzing Korean RFP documents.
+Extract structured requirements and return ONLY a valid JSON object with these fields:
+- project_name: string (project or program name)
+- required_domains: list of strings (key industry domains in Korean)
+- required_skills: list of strings (key competencies/skills needed from coaches, in Korean)
+- coach_count: integer (number of coaches requested, 0 if not mentioned)
+- budget: integer or null (total budget in KRW if mentioned)
+- summary: string (1-2 sentence Korean summary of the project goal)
 """
 
+
+def _extract_json(text: str) -> dict:
+    """응답 텍스트에서 JSON 추출 (코드블록 포함 처리)"""
+    # 직접 파싱
+    try:
+        return json.loads(text.strip())
+    except Exception:
+        pass
+    # 마크다운 코드블록에서 추출
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except Exception:
+            pass
+    # 첫 번째 { ... } 블록 추출
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            pass
+    return {}
+
+
 def extract_rfp_info(rfp_text: str) -> dict:
-    """
-    Extracts structured requirements from a raw RFP document text.
-    """
-    prompt = PromptTemplate(
-        template="""You are an expert project manager analyzing an RFP (Request for Proposal).
-        Extract the key requirements from the following RFP text.
-        
-        {format_instructions}
-        
-        RFP TEXT:
-        {text}
-        """,
-        input_variables=["text"],
-        partial_variables={"format_instructions": FORMAT_INSTRUCTIONS},
-    )
-    
-    chain = prompt | llm | parser
-    
-    result = chain.invoke({"text": rfp_text})
+    """RFP 텍스트에서 구조화된 요구사항 추출"""
+    prompt = f"{SYSTEM_PROMPT}\n\nRFP TEXT:\n{rfp_text[:6000]}"
+    response = _model.generate_content(prompt)
+    raw = response.text or ""
+    result = _extract_json(raw)
+    # 기본값 보장
+    result.setdefault("project_name", "")
+    result.setdefault("required_domains", [])
+    result.setdefault("required_skills", [])
+    result.setdefault("coach_count", 0)
+    result.setdefault("budget", None)
+    result.setdefault("summary", "")
     return result
 
 
-
-# Type alias for extraction result (used by endpoints)
 RFPExtraction = dict
 
+
 def build_search_query(extraction: dict) -> str:
-    """
-    Converts the structured extraction into a dense vector search query.
-    """
+    """추출 결과를 벡터 검색 쿼리로 변환"""
     domains = ", ".join(extraction.get("required_domains", []))
     skills = ", ".join(extraction.get("required_skills", []))
     summary = extraction.get("summary", "")
-    
-    query = f"전문 분야: {domains}. 핵심 역량: {skills}. 요약: {summary}"
-    return query
-
+    return f"전문 분야: {domains}. 핵심 역량: {skills}. 요약: {summary}"

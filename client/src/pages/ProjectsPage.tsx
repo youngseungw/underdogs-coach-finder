@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { TIER_SHORT } from "@/types/coach";
 import type { Project, ProjectStatus, ProjectCoachEvaluation } from "@/types/project";
-import { PROJECT_STATUS_LABELS, formatKRW } from "@/types/project";
+import { PROJECT_STATUS_LABELS, formatKRW, RATE_TABLE } from "@/types/project";
 import {
   Plus, Star, ChevronRight, Users, ClipboardList, Calendar, Building2,
   CheckCircle2, ArrowLeft, Search, Save, X, BarChart3, TrendingUp, Wallet,
@@ -228,7 +228,11 @@ function ProjectDetail({ project, onBack }: { project: Project; onBack: () => vo
   const [editOpen, setEditOpen] = useState(false);
   const [evalTarget, setEvalTarget] = useState<{ coachId: number; coachName: string; initial?: ProjectCoachEvaluation } | null>(null);
   const [taskDrafts, setTaskDrafts] = useState<Record<number, string>>({});
-  const [paymentDrafts, setPaymentDrafts] = useState<Record<number, { unitPrice: string; sessions: string; totalAmount: string }>>({});
+  type PayDraft = {
+    role: string; grade: string; unit: string; ratio: string;
+    unitPrice: string; sessions: string; totalAmount: string;
+  };
+  const [paymentDrafts, setPaymentDrafts] = useState<Record<number, PayDraft>>({});
 
   const handleTaskSave = (coachId: number) => {
     const draft = taskDrafts[coachId];
@@ -239,29 +243,44 @@ function ProjectDetail({ project, onBack }: { project: Project; onBack: () => vo
     }
   };
 
-  const getPaymentDraft = (coachId: number, pc: { unitPrice?: number; sessions?: number; totalAmount?: number }) => {
+  const getPaymentDraft = (coachId: number, pc: { payRole?: string; payGrade?: string; payUnit?: string; payRatio?: number; unitPrice?: number; sessions?: number; totalAmount?: number }): PayDraft => {
     return paymentDrafts[coachId] ?? {
+      role: pc.payRole ?? "",
+      grade: pc.payGrade ?? "",
+      unit: pc.payUnit ?? "일",
+      ratio: pc.payRatio != null ? String(pc.payRatio) : "100",
       unitPrice: pc.unitPrice != null ? String(pc.unitPrice) : "",
       sessions: pc.sessions != null ? String(pc.sessions) : "",
       totalAmount: pc.totalAmount != null ? String(pc.totalAmount) : "",
     };
   };
 
-  const handlePaymentChange = (coachId: number, field: "unitPrice" | "sessions" | "totalAmount", val: string, pc: { unitPrice?: number; sessions?: number; totalAmount?: number }) => {
+  const handlePaymentChange = (coachId: number, field: keyof PayDraft, val: string, pc: Parameters<typeof getPaymentDraft>[1]) => {
     const current = getPaymentDraft(coachId, pc);
     const updated = { ...current, [field]: val };
-    // 단가 × 횟수 자동계산 (totalAmount가 비어있을 때)
-    if ((field === "unitPrice" || field === "sessions") && !current.totalAmount) {
-      const u = parseFloat(field === "unitPrice" ? val : updated.unitPrice) || 0;
-      const s = parseFloat(field === "sessions" ? val : updated.sessions) || 0;
-      if (u > 0 && s > 0) updated.totalAmount = String(u * s);
+    // 역할/등급/단위 변경 시 기준 단가 자동 채움
+    const role = field === "role" ? val : updated.role;
+    const grade = field === "grade" ? val : updated.grade;
+    const unit = field === "unit" ? val : updated.unit;
+    if ((field === "role" || field === "grade" || field === "unit") && role && grade && unit) {
+      const rate = RATE_TABLE[role]?.[grade]?.[unit];
+      if (rate != null) updated.unitPrice = String(rate);
     }
+    // 단가 × 횟수 × 비율 자동계산
+    const u = parseFloat(updated.unitPrice) || 0;
+    const s = parseFloat(updated.sessions) || 0;
+    const r = parseFloat(updated.ratio) || 100;
+    if (u > 0 && s > 0) updated.totalAmount = String(Math.round(u * s * r / 100));
     setPaymentDrafts(prev => ({ ...prev, [coachId]: updated }));
   };
 
-  const handlePaymentSave = (coachId: number, pc: { unitPrice?: number; sessions?: number; totalAmount?: number }) => {
+  const handlePaymentSave = (coachId: number, pc: Parameters<typeof getPaymentDraft>[1]) => {
     const draft = getPaymentDraft(coachId, pc);
     updateCoachPayment(project.id, coachId, {
+      payRole: draft.role || undefined,
+      payGrade: draft.grade || undefined,
+      payUnit: draft.unit || undefined,
+      payRatio: draft.ratio ? Number(draft.ratio) : undefined,
       unitPrice: draft.unitPrice ? Number(draft.unitPrice) : undefined,
       sessions: draft.sessions ? Number(draft.sessions) : undefined,
       totalAmount: draft.totalAmount ? Number(draft.totalAmount) : undefined,
@@ -351,7 +370,6 @@ function ProjectDetail({ project, onBack }: { project: Project; onBack: () => vo
               const isTaskDirty = taskDraft !== undefined && taskDraft !== pc.taskSummary;
               const payDraft = getPaymentDraft(pc.coachId, pc);
               const isPayDirty = paymentDrafts[pc.coachId] !== undefined;
-              const calcTotal = (parseFloat(payDraft.unitPrice) || 0) * (parseFloat(payDraft.sessions) || 0);
 
               return (
                 <div key={pc.coachId} className="border border-border bg-white">
@@ -397,47 +415,85 @@ function ProjectDetail({ project, onBack }: { project: Project; onBack: () => vo
                           </button>
                         )}
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      {/* 역할/등급/단위 선택 */}
+                      <div className="grid grid-cols-3 gap-2 mb-2">
                         <div>
-                          <label className="text-[10px] text-muted-foreground mb-1 block">회차 단가 (원)</label>
-                          <input
-                            type="number" min="0"
-                            className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary"
-                            placeholder="예: 300000"
-                            value={payDraft.unitPrice}
-                            onChange={e => handlePaymentChange(pc.coachId, "unitPrice", e.target.value, pc)}
-                          />
+                          <label className="text-[10px] text-muted-foreground mb-1 block">역할</label>
+                          <select className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                            value={payDraft.role}
+                            onChange={e => handlePaymentChange(pc.coachId, "role", e.target.value, pc)}>
+                            <option value="">선택</option>
+                            {["코칭", "강의", "운영"].map(r => <option key={r} value={r}>{r}</option>)}
+                          </select>
                         </div>
                         <div>
-                          <label className="text-[10px] text-muted-foreground mb-1 block">투입 횟수</label>
-                          <input
-                            type="number" min="0"
-                            className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary"
-                            placeholder="예: 5"
-                            value={payDraft.sessions}
-                            onChange={e => handlePaymentChange(pc.coachId, "sessions", e.target.value, pc)}
-                          />
+                          <label className="text-[10px] text-muted-foreground mb-1 block">등급</label>
+                          <select className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                            value={payDraft.grade}
+                            onChange={e => handlePaymentChange(pc.coachId, "grade", e.target.value, pc)}>
+                            <option value="">선택</option>
+                            {["특별지급", "메인", "보조", "교육생"].map(g => <option key={g} value={g}>{g}</option>)}
+                          </select>
                         </div>
                         <div>
-                          <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
-                            총 지급액 (원)
-                            {calcTotal > 0 && !payDraft.totalAmount && (
-                              <span className="text-primary font-mono">= {formatKRW(calcTotal)}</span>
-                            )}
-                          </label>
-                          <input
-                            type="number" min="0"
-                            className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary"
-                            placeholder={calcTotal > 0 ? String(calcTotal) : "직접 입력"}
-                            value={payDraft.totalAmount}
-                            onChange={e => handlePaymentChange(pc.coachId, "totalAmount", e.target.value, pc)}
-                          />
+                          <label className="text-[10px] text-muted-foreground mb-1 block">단위</label>
+                          <select className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                            value={payDraft.unit}
+                            onChange={e => handlePaymentChange(pc.coachId, "unit", e.target.value, pc)}>
+                            {["일", "시간", "월", "회"].map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
                         </div>
                       </div>
+                      {/* 단가/횟수/비율/총액 */}
+                      <div className="grid grid-cols-4 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground mb-1 block">단가 (원)</label>
+                          <input type="number" min="0"
+                            className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary"
+                            placeholder="자동입력"
+                            value={payDraft.unitPrice}
+                            onChange={e => handlePaymentChange(pc.coachId, "unitPrice", e.target.value, pc)} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground mb-1 block">횟수</label>
+                          <input type="number" min="0"
+                            className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary"
+                            placeholder="예: 10"
+                            value={payDraft.sessions}
+                            onChange={e => handlePaymentChange(pc.coachId, "sessions", e.target.value, pc)} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground mb-1 block">비율 (%)</label>
+                          <input type="number" min="0" max="100"
+                            className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary"
+                            placeholder="100"
+                            value={payDraft.ratio}
+                            onChange={e => handlePaymentChange(pc.coachId, "ratio", e.target.value, pc)} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground mb-1 block">총 지급액 (원)</label>
+                          <input type="number" min="0"
+                            className="w-full border border-border px-2 py-1.5 text-[12px] rounded-[2px] focus:outline-none focus:ring-1 focus:ring-primary"
+                            placeholder="자동계산"
+                            value={payDraft.totalAmount}
+                            onChange={e => handlePaymentChange(pc.coachId, "totalAmount", e.target.value, pc)} />
+                        </div>
+                      </div>
+                      {/* 산식 미리보기 */}
+                      {payDraft.unitPrice && payDraft.sessions && (
+                        <div className="mt-1.5 text-[11px] text-muted-foreground font-mono">
+                          {payDraft.role && payDraft.grade && <span className="text-foreground font-semibold mr-1">[{payDraft.role} {payDraft.grade}]</span>}
+                          {formatKRW(Number(payDraft.unitPrice))} × {payDraft.sessions}{payDraft.unit}
+                          {payDraft.ratio && payDraft.ratio !== "100" && ` × ${payDraft.ratio}%`}
+                          {payDraft.totalAmount && <span className="text-primary font-semibold"> = {formatKRW(Number(payDraft.totalAmount))}</span>}
+                        </div>
+                      )}
                       {(pc.totalAmount || pc.unitPrice) && !isPayDirty && (
-                        <div className="mt-1.5 flex items-center gap-3 text-[11px] text-muted-foreground">
-                          {pc.unitPrice && <span>단가 {formatKRW(pc.unitPrice)}</span>}
-                          {pc.sessions && <span>× {pc.sessions}회</span>}
+                        <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+                          {pc.payRole && pc.payGrade && <span className="text-foreground font-semibold">[{pc.payRole} {pc.payGrade}]</span>}
+                          {pc.unitPrice && <span>{formatKRW(pc.unitPrice)}</span>}
+                          {pc.sessions && <span>× {pc.sessions}{pc.payUnit ?? "회"}</span>}
+                          {pc.payRatio && pc.payRatio !== 100 && <span>× {pc.payRatio}%</span>}
                           {pc.totalAmount && <span className="font-semibold text-foreground">= {formatKRW(pc.totalAmount)}</span>}
                         </div>
                       )}

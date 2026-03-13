@@ -16,6 +16,7 @@ interface CoachCardProps {
   onToggle: () => void;
   onViewDetail: () => void;
   onEdit?: () => void;
+  activeProjects?: string[];  // 현재 투입 중인 사업명 목록
 }
 
 function formatCareer(raw: string, years: number): string {
@@ -48,6 +49,7 @@ export default function CoachCard({
   onToggle,
   onViewDetail,
   onEdit,
+  activeProjects,
 }: CoachCardProps) {
   const { lang, t } = useLanguage();
   const catLabel = CATEGORY_LABELS[coach.category]?.[lang] || coach.category;
@@ -139,14 +141,23 @@ export default function CoachCard({
           </div>
         </div>
 
-        {/* 카테고리 + 한줄 소개 */}
-        <div className="flex items-center gap-1.5 mb-2">
+        {/* 카테고리 + 투입중 뱃지 */}
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
           <span className={`px-1.5 py-[2px] text-[10px] font-medium border leading-tight ${catColor}`}>
             {catLabel}
           </span>
           {coach.main_field && coach.main_field !== coach.category && (
-            <span className="px-1.5 py-[2px] text-[10px] text-muted-foreground border border-border leading-tight truncate max-w-[140px]">
+            <span className="px-1.5 py-[2px] text-[10px] text-muted-foreground border border-border leading-tight truncate max-w-[120px]">
               {coach.main_field}
+            </span>
+          )}
+          {activeProjects && activeProjects.length > 0 && (
+            <span
+              className="px-1.5 py-[2px] text-[9px] font-semibold bg-orange-100 text-orange-700 border border-orange-300 leading-tight"
+              title={activeProjects.join(", ")}
+            >
+              투입중 · {activeProjects[0].length > 10 ? activeProjects[0].slice(0, 10) + "…" : activeProjects[0]}
+              {activeProjects.length > 1 && ` 외 ${activeProjects.length - 1}`}
             </span>
           )}
         </div>

@@ -1,12 +1,16 @@
 /*
- * CoachDataContext - localStorage 기반 코치 데이터 CRUD 관리
- * 원본 JSON + localStorage 오버레이로 신규 등록/수정/삭제 지원
+ * CoachDataContext - Firestore 기반 코치 데이터 CRUD 관리
+ * 원본 JSON + Firestore 오버레이로 신규 등록/수정/삭제 지원
+ * Firestore 미설정 시 localStorage 폴백
  */
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import type { Coach } from "@/types/coach";
 import coachesRaw from "@/data/coaches_db.json";
+import { db } from "@/lib/firebase";
+import { doc, setDoc, onSnapshot } from "firebase/firestore";
 
-const STORAGE_KEY = "underdogs_coach_custom_data";
+const LS_KEY = "underdogs_coach_custom_data";
+const FIRESTORE_DOC = "coachOverlay/global";
 
 interface CustomData {
   added: Coach[];
@@ -14,16 +18,14 @@ interface CustomData {
   deleted: number[];
 }
 
-function loadCustomData(): CustomData {
+const EMPTY: CustomData = { added: [], edited: {}, deleted: [] };
+
+function loadFromLS(): CustomData {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(LS_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { added: [], edited: {}, deleted: [] };
-}
-
-function saveCustomData(data: CustomData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  return EMPTY;
 }
 
 interface CoachDataContextType {
@@ -47,81 +49,103 @@ const CoachDataContext = createContext<CoachDataContextType>({
 const baseCoaches = coachesRaw as Coach[];
 
 export function CoachDataProvider({ children }: { children: ReactNode }) {
-  const [customData, setCustomData] = useState<CustomData>(loadCustomData);
+  const [customData, setCustomData] = useState<CustomData>(EMPTY);
 
+  // Firestore 실시간 동기화
   useEffect(() => {
-    saveCustomData(customData);
-  }, [customData]);
+    if (!db) {
+      setCustomData(loadFromLS());
+      return;
+    }
+    const [colId, docId] = FIRESTORE_DOC.split("/");
+    const unsubscribe = onSnapshot(
+      doc(db, colId, docId),
+      (snap) => {
+        if (snap.exists()) {
+          setCustomData(snap.data() as CustomData);
+        } else {
+          setCustomData(EMPTY);
+        }
+      },
+      () => {
+        setCustomData(loadFromLS());
+      }
+    );
+    return unsubscribe;
+  }, []);
+
+  // Firestore 또는 localStorage에 저장
+  const persist = useCallback(async (data: CustomData) => {
+    if (db) {
+      const [colId, docId] = FIRESTORE_DOC.split("/");
+      await setDoc(doc(db, colId, docId), data);
+    } else {
+      localStorage.setItem(LS_KEY, JSON.stringify(data));
+    }
+  }, []);
 
   const allCoaches: Coach[] = (() => {
-    // Start with base data
     let result = baseCoaches
       .filter((c) => !customData.deleted.includes(c.id))
       .map((c) => {
         const edits = customData.edited[c.id];
-        if (edits) return { ...c, ...edits };
-        return c;
+        return edits ? { ...c, ...edits } : c;
       });
-    // Add custom coaches
-    result = [...result, ...customData.added];
-    return result;
+    return [...result, ...customData.added];
   })();
 
   const addCoach = useCallback((coachData: Omit<Coach, "id">) => {
-    const maxId = Math.max(
-      ...baseCoaches.map((c) => c.id),
-      ...customData.added.map((c) => c.id),
-      0
-    );
-    const newCoach: Coach = { ...coachData, id: maxId + 1 } as Coach;
-    setCustomData((prev) => ({
-      ...prev,
-      added: [...prev.added, newCoach],
-    }));
-  }, [customData.added]);
+    setCustomData((prev) => {
+      const maxId = Math.max(
+        ...baseCoaches.map((c) => c.id),
+        ...prev.added.map((c) => c.id),
+        0
+      );
+      const newCoach: Coach = { ...coachData, id: maxId + 1 } as Coach;
+      const next = { ...prev, added: [...prev.added, newCoach] };
+      persist(next);
+      return next;
+    });
+  }, [persist]);
 
   const updateCoach = useCallback((id: number, updates: Partial<Coach>) => {
     setCustomData((prev) => {
-      // Check if it's a custom-added coach
       const addedIdx = prev.added.findIndex((c) => c.id === id);
+      let next: CustomData;
       if (addedIdx >= 0) {
         const newAdded = [...prev.added];
         newAdded[addedIdx] = { ...newAdded[addedIdx], ...updates };
-        return { ...prev, added: newAdded };
+        next = { ...prev, added: newAdded };
+      } else {
+        next = {
+          ...prev,
+          edited: { ...prev.edited, [id]: { ...(prev.edited[id] || {}), ...updates } },
+        };
       }
-      // It's a base coach - merge edits
-      return {
-        ...prev,
-        edited: {
-          ...prev.edited,
-          [id]: { ...(prev.edited[id] || {}), ...updates },
-        },
-      };
+      persist(next);
+      return next;
     });
-  }, []);
+  }, [persist]);
 
   const deleteCoach = useCallback((id: number) => {
     setCustomData((prev) => {
-      // If custom-added, just remove from added list
       const addedIdx = prev.added.findIndex((c) => c.id === id);
+      let next: CustomData;
       if (addedIdx >= 0) {
-        return {
-          ...prev,
-          added: prev.added.filter((c) => c.id !== id),
-        };
+        next = { ...prev, added: prev.added.filter((c) => c.id !== id) };
+      } else {
+        next = { ...prev, deleted: [...prev.deleted, id] };
       }
-      // Base coach - add to deleted list
-      return {
-        ...prev,
-        deleted: [...prev.deleted, id],
-      };
+      persist(next);
+      return next;
     });
-  }, []);
+  }, [persist]);
 
   const resetCustomData = useCallback(() => {
-    setCustomData({ added: [], edited: {}, deleted: [] });
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
+    persist(EMPTY);
+    setCustomData(EMPTY);
+    localStorage.removeItem(LS_KEY);
+  }, [persist]);
 
   const customDataStats = {
     added: customData.added.length,

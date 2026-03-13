@@ -37,17 +37,21 @@ export default function Home() {
     allCoaches,
     stats,
     setAiRecommendations,
+    aiRecommendedCoaches,
+    coachAvailability,
   } = useCoachSearch();
 
   const { addCoach, updateCoach, deleteCoach, customDataStats } = useCoachData();
   const { t } = useLanguage();
-  const { logout, user } = useAuth();
+  const { logout, user, isAdmin } = useAuth();
   const [detailCoach, setDetailCoach] = useState<Coach | null>(null);
   const [viewMode, setViewMode] = useState<"recommended" | "all">("recommended");
   const [formOpen, setFormOpen] = useState(false);
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [editCoach, setEditCoach] = useState<Coach | null>(null);
   const [allPage, setAllPage] = useState(1);
+  const [aiStreaming, setAiStreaming] = useState(false);
+  const [aiExtraction, setAiExtraction] = useState<Record<string, any> | null>(null);
   
   // Expose modal open function for FilterPanel
   (window as any).dispatchAiModalOpen = () => setAiModalOpen(true);
@@ -98,22 +102,77 @@ export default function Home() {
     deleteCoach(id);
   };
 
-  // AI 추천: 서버 우선 시도, 실패 시 클라이언트 키워드 검색으로 폴백
+  // AI 추천: 스트리밍 우선 → 폴백 non-streaming → 폴백 클라이언트 키워드
   const handleAiRecommend = useCallback(async (text: string) => {
+    const filterParams = {
+      industries: filters.industries,
+      expertise: filters.expertise,
+      regions: filters.regions,
+      roles: filters.roles,
+      tiers: filters.tiers,
+      categories: filters.categories,
+    };
+
+    // 1단계: 스트리밍 시도
+    try {
+      const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+      const res = await fetch(`${apiBase}/api/v1/recommend/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rfp_text: text, filters: filterParams, top_k: filters.resultCount }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!res.ok || !res.body) throw new Error('stream_error');
+
+      setAiRecommendations([]);
+      setAiExtraction(null);
+      setViewMode("recommended");
+      setAiStreaming(true);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      const accumulated: any[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'extraction') {
+              setAiExtraction(event.data);
+            } else if (event.type === 'coach') {
+              accumulated.push(event.data);
+              setAiRecommendations([...accumulated]);
+            } else if (event.type === 'error') {
+              throw new Error(event.message);
+            }
+          } catch { /* skip malformed lines */ }
+        }
+      }
+      setAiStreaming(false);
+      return;
+    } catch {
+      setAiStreaming(false); // 스트리밍 도중 오류 시 인디케이터 리셋
+    }
+
+    // 2단계: non-streaming 시도
     try {
       const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
       const res = await fetch(`${apiBase}/api/v1/recommend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rfp_text: text }),
-        signal: AbortSignal.timeout(15000), // Increased timeout for serverless wake-up
+        body: JSON.stringify({ rfp_text: text, filters: filterParams, top_k: filters.resultCount }),
+        signal: AbortSignal.timeout(30000),
       });
       if (!res.ok) throw new Error('server_error');
       const data = await res.json();
-      if (data.recommendations) {
-        setAiRecommendations(data.recommendations);
-      }
+      if (data.extraction) setAiExtraction(data.extraction);
+      if (data.recommendations) setAiRecommendations(data.recommendations);
       setViewMode("recommended");
+      return;
     } catch {
       // 서버 미응답 시 클라이언트 키워드 기반 검색으로 폴백
       const keywords = text
@@ -152,7 +211,7 @@ export default function Home() {
       );
       setViewMode("recommended");
     }
-  }, [rankedCoaches, filters.resultCount, setAiRecommendations]);
+  }, [rankedCoaches, filters, setAiRecommendations]);
 
   return (
     <div className="flex min-h-screen bg-white">
@@ -206,6 +265,14 @@ export default function Home() {
                   <CheckSquare className="w-3 h-3 mr-1" />
                   {t("select_all")}
                 </Button>
+              )}
+
+              {/* 스트리밍 인디케이터 */}
+              {aiStreaming && (
+                <div className="flex items-center gap-1.5 text-[10px] text-indigo-600 animate-pulse">
+                  <Sparkles className="w-3 h-3" />
+                  <span>AI 분석 중...</span>
+                </div>
               )}
 
               {/* 활성 필터 표시 */}
@@ -289,6 +356,38 @@ export default function Home() {
           </div>
         </div>
 
+        {/* AI 분석 결과 배너 */}
+        {aiExtraction && viewMode === "recommended" && aiRecommendedCoaches.length > 0 && (
+          <div className="mx-6 mt-4 p-3 bg-indigo-50 border border-indigo-200 flex items-start gap-2.5">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-500 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              {aiExtraction.project_name && (
+                <p className="text-[12px] font-semibold text-indigo-900 mb-0.5">{aiExtraction.project_name}</p>
+              )}
+              {aiExtraction.summary && (
+                <p className="text-[11px] text-indigo-700 mb-1.5 leading-relaxed">{aiExtraction.summary}</p>
+              )}
+              <div className="flex flex-wrap gap-1">
+                {aiExtraction.required_domains?.map((d: string) => (
+                  <span key={d} className="px-1.5 py-0.5 text-[10px] bg-indigo-100 text-indigo-700 border border-indigo-200">{d}</span>
+                ))}
+                {aiExtraction.required_skills?.slice(0, 6).map((s: string) => (
+                  <span key={s} className="px-1.5 py-0.5 text-[10px] bg-white text-indigo-600 border border-indigo-200">{s}</span>
+                ))}
+                {aiExtraction.coach_count > 0 && (
+                  <span className="px-1.5 py-0.5 text-[10px] bg-indigo-600 text-white ml-1">코치 {aiExtraction.coach_count}명</span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => { setAiExtraction(null); resetFilters(); }}
+              className="ml-auto text-indigo-400 hover:text-indigo-700 flex-shrink-0 text-[10px]"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* 코치 카드 그리드 */}
         <div className="p-6 pb-28">
           {displayCoaches.length === 0 ? (
@@ -325,7 +424,8 @@ export default function Home() {
                       isSelected={selectedCoaches.has(item.coach.id)}
                       onToggle={() => toggleCoach(item.coach.id)}
                       onViewDetail={() => setDetailCoach(item.coach)}
-                      onEdit={() => handleOpenEdit(item.coach)}
+                      onEdit={isAdmin ? () => handleOpenEdit(item.coach) : undefined}
+                      activeProjects={coachAvailability[item.coach.id]}
                     />
                   ))}
                 </AnimatePresence>
@@ -354,10 +454,10 @@ export default function Home() {
         coach={detailCoach}
         open={!!detailCoach}
         onClose={() => setDetailCoach(null)}
-        onEdit={(coach) => {
+        onEdit={isAdmin ? (coach) => {
           setDetailCoach(null);
           handleOpenEdit(coach);
-        }}
+        } : undefined}
       />
 
       {/* 코치 등록/수정 모달 */}

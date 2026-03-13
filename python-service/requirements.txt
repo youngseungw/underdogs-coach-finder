@@ -2,7 +2,10 @@ fastapi
 uvicorn[standard]
 langchain
 langchain-google-genai
+langchain-community
 google-generativeai
+faiss-cpu
 pydantic
 pydantic-settings
 python-dotenv
+httpx

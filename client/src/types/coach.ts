@@ -65,7 +65,7 @@ export const TIER_SHORT: Record<number, string> = {
 };
 
 export const CATEGORY_LABELS: Record<string, Record<LangCode, string>> = {
-  "파트너코치": { ko: "파트너코치", en: "Partner Coach", ja: "パートナーコーチ" },
+  "파트너코치": { ko: "베테랑코치", en: "Veteran Coach", ja: "ベテランコーチ" },
   "코치": { ko: "코치", en: "Coach", ja: "コーチ" },
   "컨설턴트": { ko: "컨설턴트", en: "Consultant", ja: "コンサルタント" },
   "투자사": { ko: "투자사", en: "Investor", ja: "投資家" },
@@ -117,14 +117,14 @@ export const EXPERTISE_OPTIONS = [
 export const INDUSTRY_OPTIONS = [
   "교육",
   "IT/소프트웨어",
-  "식품/농업",
-  "콘텐츠/미디어",
+  "식품/농업",          // 데이터: 식품/농업, 푸드/농업 모두 매칭
+  "콘텐츠/미디어",     // 데이터: 콘텐츠/예술, 콘텐츠/미디어 모두 매칭
   "문화/예술",
-  "사회/복지",
+  "사회/복지",          // 데이터: 소셜/지속가능성 포함 매칭
   "리테일/커머스",
   "헬스케어/바이오",
-  "환경/에너지",
-  "제조/하드웨어",
+  "환경/에너지",        // 데이터: 환경에너지 포함 매칭
+  "제조/하드웨어",      // 데이터: 제조/HW, 제조업 포함 매칭
   "모빌리티/교통",
   "핀테크/금융서비스",
   "엔터테인먼트/게임",
@@ -134,8 +134,10 @@ export const INDUSTRY_OPTIONS = [
   "물류/유통",
   "소셜/지속가능성",
   "광고/마케팅",
-  "홀리빙/펫",
-  "푸드/농업",
+  "홈리빙/펫",          // 데이터: 홈테크/펫테크 포함 매칭
+  "스포츠/피트니스",    // 데이터: 피트니스/스포츠 포함 매칭
+  "AI/딥테크",
+  "투자/보육",
 ];
 
 export const REGION_OPTIONS = [

@@ -1,10 +1,11 @@
-import { initializeApp, getApps } from "firebase/app";
+import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
   signOut as firebaseSignOut,
 } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,7 +16,6 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Firebase가 설정된 경우에만 초기화
 export const isFirebaseConfigured = !!(
   import.meta.env.VITE_FIREBASE_API_KEY &&
   import.meta.env.VITE_FIREBASE_PROJECT_ID
@@ -23,13 +23,14 @@ export const isFirebaseConfigured = !!(
 
 let auth: ReturnType<typeof getAuth> | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
+let db: Firestore | null = null;
 
 if (isFirebaseConfigured) {
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
   auth = getAuth(app);
+  db = getFirestore(app, "coachfinder");
   googleProvider = new GoogleAuthProvider();
-  // udimpact.ai 도메인 힌트 제공 (Google 로그인 화면에서 해당 계정 우선 표시)
   googleProvider.setCustomParameters({ hd: "udimpact.ai" });
 }
 
-export { auth, googleProvider, signInWithPopup, firebaseSignOut };
+export { auth, googleProvider, signInWithPopup, firebaseSignOut, db };
