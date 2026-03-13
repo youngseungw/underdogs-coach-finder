@@ -22,11 +22,12 @@ const AuthContext = createContext<AuthContextType | null>(null);
 // 허용된 계정 목록 (이메일/비밀번호 로그인용)
 const ALLOWED_ACCOUNTS: Record<string, string> = {
   "zero@udimpact.ai": "underdogs2024!",
+  "udpb@udimpact.ai": "underdogs2024!",
   "admin@underdogs.co.kr": "underdogs2024!",
 };
 
 // 코치 수정 권한을 가진 admin 계정
-const ADMIN_EMAILS = new Set(["zero@udimpact.ai", "admin@underdogs.co.kr"]);
+const ADMIN_EMAILS = new Set(["zero@udimpact.ai", "udpb@udimpact.ai", "admin@underdogs.co.kr"]);
 
 const AUTH_STORAGE_KEY = "underdogs_auth";
 
@@ -76,10 +77,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (err: unknown) {
       const code = (err as { code?: string }).code;
-      if (code === "auth/popup-closed-by-user") {
+      console.error("[Google Login Error]", code, err);
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
         return { success: false };
       }
-      return { success: false, error: "Google 로그인 중 오류가 발생했습니다." };
+      if (code === "auth/unauthorized-domain") {
+        return { success: false, error: `이 도메인은 Firebase에 등록되지 않았습니다. (${code})` };
+      }
+      if (code === "auth/operation-not-allowed") {
+        return { success: false, error: `Google 로그인이 Firebase에서 비활성화되어 있습니다. (${code})` };
+      }
+      return { success: false, error: `Google 로그인 오류: ${code || "알 수 없는 오류"}` };
     }
   }, []);
 
